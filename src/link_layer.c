@@ -1,7 +1,5 @@
-// Link layer protocol implementation
-
-#include "link_layer.h"
 #include "serial_port.h"
+#include "link_layer.h"
 #include <signal.h>
 #include <stdio.h>
 
@@ -316,24 +314,26 @@ int llwrite(const unsigned char *buf, int bufSize)
 ////////////////////////////////////////////////
 int llread(unsigned char *packet)
 {
-    unsigned char *buffer;
+    unsigned char buffer;
     unsigned char first_byte_of_payload;
     int indice = 0;
     StateMachine estado = START;
     unsigned char campoC;
+
     while (estado != STOP)
+    {
+        if (readByteSerialPort(&buffer) != 0)
         {
-            if (readByteSerialPort(buffer) != 0)
+            switch (estado)
             {
-                if (estado == START)
-                {
+                case START:
                     if (buffer == FLAG)
                     {
                         estado = FLAG_RCV;
                     }
-                }
-                else if (estado == FLAG_RCV)
-                {
+                    break;
+
+                case FLAG_RCV:
                     if (buffer == ADDR_SRAS)
                     {
                         estado = A_RCV;
@@ -342,9 +342,9 @@ int llread(unsigned char *packet)
                     {
                         estado = START;
                     }
-                }
-                else if (estado == A_RCV)
-                {
+                    break;
+
+                case A_RCV:
                     if (buffer == FLAG)
                     {
                         estado = FLAG_RCV;
@@ -354,19 +354,20 @@ int llread(unsigned char *packet)
                         estado = C_RCV;
                         campoC = buffer;
                     }
-                    else if(buffer == DISC){
+                    else if (buffer == DISC)
+                    {
                         unsigned char trama[5] = {FLAG, ADDR_SRAS, DISC, ADDR_SRAS ^ DISC, FLAG};
-                        return writeBytesSerialPort(trama, 5);
-                        break;
+                        writeBytesSerialPort(trama, 5);
+                        return 0; 
                     }
                     else
                     {
                         estado = START;
                     }
-                }
-                else if (estado == C_RCV)
-                {
-                    if (buffer == ADDR_SSAR ^ campoC)
+                    break;
+
+                case C_RCV:
+                    if (buffer == (ADDR_SSAR ^ campoC))
                     {
                         estado = BCC_OK;
                     }
@@ -378,87 +379,76 @@ int llread(unsigned char *packet)
                     {
                         estado = START;
                     }
-                }
-                else if (estado == BCC_OK)
-                {
+                    break;
+
+                case BCC_OK:
                     estado = PAYLOAD;
-                }
-                else if (estado == PAYLOAD)
-                {
+                    break;
+
+                case PAYLOAD:
                     if (buffer == FLAG)
                     {
-                        unsigned char bcc2 = packet[indice-1];
-                        indice--;
+                        unsigned char bcc2 = packet[indice - 1];
+                        indice--; 
 
                         first_byte_of_payload = packet[0];
-
-                        for(unsigned int w = 1; w < indice; w++){
+                        for (unsigned int w = 1; w < indice; w++)
+                        {
                             first_byte_of_payload ^= packet[w];
                         }
-                        if(bcc2 == first_byte_of_payload){
+
+                        if (bcc2 == first_byte_of_payload)
+                        {
                             estado = STOP;
-                            if(trama_receiver == 1){
-                                unsigned char trama[5] = {FLAG, ADDR_SRAS, C_I1, ADDR_SRAS ^ C_I1, FLAG};
-                                if(trama_receiver == 1){
-                                    trama_receiver =0;
-                                }
-                                else if(trama_receiver == 0){
-                                    trama_receiver =1;
-                                }
-                                writeBytesSerialPort(trama, 5);
-                                return indice;
+                            unsigned char trama[5] = {FLAG, ADDR_SRAS, (trama_receiver == 1 ? C_I1 : C_I0), ADDR_SRAS ^ (trama_receiver == 1 ? C_I1 : C_I0), FLAG};
+                            if(trama_receiver==0){
+                                trama_receiver=1;
+                            }else{
+                                trama_receiver=0;
                             }
-                            else{
-                                unsigned char trama[5] = {FLAG, ADDR_SRAS, C_I0, ADDR_SRAS ^ C_I0, FLAG};
-                                if(trama_receiver == 1){
-                                    trama_receiver =0;
-                                }
-                                else if(trama_receiver == 0){
-                                    trama_receiver =1;
-                                }
-                                writeBytesSerialPort(trama, 5);
-                                return indice;
+                            writeBytesSerialPort(trama, 5);
+                            return indice; 
                         }
+                        else
+                        {
+                            unsigned char trama[5] = {FLAG, ADDR_SRAS, (trama_receiver == 1 ? C_REJ1 : C_REJ0), ADDR_SRAS ^ (trama_receiver == 1 ? C_REJ1 : C_REJ0), FLAG};
+                            if(trama_receiver==0){
+                                trama_receiver=1;
+                            }else{
+                                trama_receiver=0;
+                            }  
+                            writeBytesSerialPort(trama, 5);
+                            return -1; 
                         }
-                        else{
-                            if(trama_receiver == 1){
-                                unsigned char trama[5] = {FLAG, ADDR_SRAS, C_REJ1, ADDR_SRAS ^ C_REJ1, FLAG};
-                                if(trama_receiver == 1){
-                                    trama_receiver =0;
-                                }
-                                else if(trama_receiver == 0){
-                                    trama_receiver =1;
-                                }
-                                writeBytesSerialPort(trama, 5);
-                                return indice;
-                            }
-                            else{
-                                unsigned char trama[5] = {FLAG, ADDR_SRAS, C_REJ0, ADDR_SRAS ^ C_REJ0, FLAG};
-                                if(trama_receiver == 1){
-                                    trama_receiver =0;
-                                }
-                                else if(trama_receiver == 0){
-                                    trama_receiver =1;
-                                }
-                                writeBytesSerialPort(trama, 5);
-                                return indice;
-                        }
+                    }
+                    else if (buffer == ESC)
+                    {
                         
+                        if (buffer == FLAG || buffer == ESC)
+                        {
+                            packet[indice++] = buffer;  
                         }
-                            
-        
+                        else
+                        {
+                            packet[indice++] = ESC;
+                            packet[indice++] = buffer;
+                        }
                     }
                     else
                     {
-                        estado = START;
+                        packet[indice++] = buffer;  
                     }
-                }
+                    break;
+
+                default:
+                    estado = START;
+                    break;
             }
         }
+    }
 
     return 0;
 }
-
 ////////////////////////////////////////////////
 // LLCLOSE
 ////////////////////////////////////////////////
@@ -477,7 +467,7 @@ int llclose(int showStatistics)
     alarmEnabled = FALSE;
     while (alarmEnabled == FALSE && estado != STOP)
     {
-        if (readByteSerialPort(buffer) != 0)
+        if (readByteSerialPort(&buffer) != 0)
         {
             if (estado == START)
             {
