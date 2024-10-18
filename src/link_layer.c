@@ -8,10 +8,17 @@
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
 
+static int trama_transmiter = 0;
+static int trama_receiver = 1;
 int alarmCount = 0;
 int alarmEnabled = FALSE;
 int transmissoes = 0;
 int intervalo = 0;
+
+// Se bcc1 estiver errado, não devo fazer nada, significa que o cabeçalho está errado e tenho de deitar tudo fora, esperar que do lado do transmissor de timeout e esperar que envie outra vez
+
+// Se bcc2 falhar sabe que o cabeçalho está certo, mas algum dos bytes dos dados está errado, poderia simplesmente descartar e enviar tudo de novo, mas como sabe que o cabeçalho está bem pode mandar uma trama de REJ(0) e dizer que recebeu uma trama errada e assim o transmissor envia logo e não espera pelo timeout, o que acelera o processo
+// Mecanismo do bcc2 não é necessário, porém dá melhor nota
 
 void alarmHandler(int signal)
 {
@@ -218,8 +225,19 @@ int llwrite(const unsigned char *buf, int bufSize)
     unsigned char buffer[MAX_PAYLOAD_SIZE * 3];
     buffer[0] = FLAG;
     buffer[1] = ADDR_SSAR;
-    buffer[2] = C_I0;
+    if(trama_transmiter == 0){
+        buffer[2] = C_I0;
+    }else if(trama_transmiter == 1){
+        buffer[2] = C_I1;
+    }
+        
     buffer[3] = buffer[1] ^ buffer[2];
+
+    unsigned char bcc2 = buf[0];
+    for (unsigned int i = 1; i < bufSize; i++) // bcc2 tem de ser calculado antes das transformação de stuffing
+    {
+        bcc2 ^= buf[i];
+    }
 
     unsigned int w = 4;
     for (unsigned int i = 0; i < bufSize; i++)
@@ -227,7 +245,7 @@ int llwrite(const unsigned char *buf, int bufSize)
         if (buf[i] == FLAG)
         {
             buffer[w++] = ESC;
-            buffer[w++] = OCT_RPL_FLAG;
+            buffer[w++] = OCT_RPL_FLAG; // Aqui transformamos a flag e o esc em 2 octetos, na função read temos de fazer o contrário para preservar dados
         }
         else if (buf[i] == ESC)
         {
@@ -238,11 +256,6 @@ int llwrite(const unsigned char *buf, int bufSize)
         {
             buffer[w++] = buf[i];
         }
-    }
-    unsigned char bcc2 = buf[0];
-    for (unsigned int i = 1; i < bufSize; i++)
-    {
-        bcc2 ^= buf[i];
     }
 
     buffer[w++] = bcc2;
@@ -266,6 +279,11 @@ int llwrite(const unsigned char *buf, int bufSize)
             unsigned char campoC = frame_control_check();
             if (campoC == C_RR0 || campoC == C_RR1)
             {
+                if(trama_transmiter == 1){
+                    trama_transmiter = 0;
+                }else{
+                    trama_transmiter = 1;
+                }
                 aceite = 1;
             }
             else if (campoC == C_REJ0 || campoC == C_REJ1)
@@ -289,7 +307,6 @@ int llwrite(const unsigned char *buf, int bufSize)
     }
     else
     {
-        // É SUPOSTO FECHAR A PORTA SE DER ERRO DEPOIS DE MUITAS TENTATIVAS?
         return -1;
     }
 }
@@ -299,7 +316,145 @@ int llwrite(const unsigned char *buf, int bufSize)
 ////////////////////////////////////////////////
 int llread(unsigned char *packet)
 {
-    //PEDIR AJUDA AO PROFESSOR
+    unsigned char *buffer;
+    unsigned char first_byte_of_payload;
+    int indice = 0;
+    StateMachine estado = START;
+    unsigned char campoC;
+    while (estado != STOP)
+        {
+            if (readByteSerialPort(buffer) != 0)
+            {
+                if (estado == START)
+                {
+                    if (buffer == FLAG)
+                    {
+                        estado = FLAG_RCV;
+                    }
+                }
+                else if (estado == FLAG_RCV)
+                {
+                    if (buffer == ADDR_SRAS)
+                    {
+                        estado = A_RCV;
+                    }
+                    else if (buffer != FLAG)
+                    {
+                        estado = START;
+                    }
+                }
+                else if (estado == A_RCV)
+                {
+                    if (buffer == FLAG)
+                    {
+                        estado = FLAG_RCV;
+                    }
+                    else if (buffer == C_I0 || buffer == C_I1)
+                    {
+                        estado = C_RCV;
+                        campoC = buffer;
+                    }
+                    else if(buffer == DISC){
+                        unsigned char trama[5] = {FLAG, ADDR_SRAS, DISC, ADDR_SRAS ^ DISC, FLAG};
+                        return writeBytesSerialPort(trama, 5);
+                        break;
+                    }
+                    else
+                    {
+                        estado = START;
+                    }
+                }
+                else if (estado == C_RCV)
+                {
+                    if (buffer == ADDR_SSAR ^ campoC)
+                    {
+                        estado = BCC_OK;
+                    }
+                    else if (buffer == FLAG)
+                    {
+                        estado = FLAG_RCV;
+                    }
+                    else
+                    {
+                        estado = START;
+                    }
+                }
+                else if (estado == BCC_OK)
+                {
+                    estado = PAYLOAD;
+                }
+                else if (estado == PAYLOAD)
+                {
+                    if (buffer == FLAG)
+                    {
+                        unsigned char bcc2 = packet[indice-1];
+                        indice--;
+
+                        first_byte_of_payload = packet[0];
+
+                        for(unsigned int w = 1; w < indice; w++){
+                            first_byte_of_payload ^= packet[w];
+                        }
+                        if(bcc2 == first_byte_of_payload){
+                            estado = STOP;
+                            if(trama_receiver == 1){
+                                unsigned char trama[5] = {FLAG, ADDR_SRAS, C_I1, ADDR_SRAS ^ C_I1, FLAG};
+                                if(trama_receiver == 1){
+                                    trama_receiver =0;
+                                }
+                                else if(trama_receiver == 0){
+                                    trama_receiver =1;
+                                }
+                                writeBytesSerialPort(trama, 5);
+                                return indice;
+                            }
+                            else{
+                                unsigned char trama[5] = {FLAG, ADDR_SRAS, C_I0, ADDR_SRAS ^ C_I0, FLAG};
+                                if(trama_receiver == 1){
+                                    trama_receiver =0;
+                                }
+                                else if(trama_receiver == 0){
+                                    trama_receiver =1;
+                                }
+                                writeBytesSerialPort(trama, 5);
+                                return indice;
+                        }
+                        }
+                        else{
+                            if(trama_receiver == 1){
+                                unsigned char trama[5] = {FLAG, ADDR_SRAS, C_REJ1, ADDR_SRAS ^ C_REJ1, FLAG};
+                                if(trama_receiver == 1){
+                                    trama_receiver =0;
+                                }
+                                else if(trama_receiver == 0){
+                                    trama_receiver =1;
+                                }
+                                writeBytesSerialPort(trama, 5);
+                                return indice;
+                            }
+                            else{
+                                unsigned char trama[5] = {FLAG, ADDR_SRAS, C_REJ0, ADDR_SRAS ^ C_REJ0, FLAG};
+                                if(trama_receiver == 1){
+                                    trama_receiver =0;
+                                }
+                                else if(trama_receiver == 0){
+                                    trama_receiver =1;
+                                }
+                                writeBytesSerialPort(trama, 5);
+                                return indice;
+                        }
+                        
+                        }
+                            
+        
+                    }
+                    else
+                    {
+                        estado = START;
+                    }
+                }
+            }
+        }
 
     return 0;
 }
