@@ -2,18 +2,96 @@
 
 #include "application_layer.h"
 #include "link_layer.h"
-#include <stdio.h>
 #include <string.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <termios.h>
+#include <unistd.h>
+#include <math.h>
 
+unsigned char *parseControlPacket(unsigned char *packet, int size, unsigned long int *fileSize)
+{
+
+    // File Size
+    unsigned char fileSizeNBytes = packet[2];
+    unsigned char fileSizeAux[fileSizeNBytes];
+    memcpy(fileSizeAux, packet + 3, fileSizeNBytes);
+    for (unsigned int i = 0; i < fileSizeNBytes; i++)
+        *fileSize |= (fileSizeAux[fileSizeNBytes - i - 1] << (8 * i));
+
+    // File Name
+    unsigned char fileNameNBytes = packet[3 + fileSizeNBytes + 1];
+    unsigned char *name = (unsigned char *)malloc(fileNameNBytes);
+    memcpy(name, packet + 3 + fileSizeNBytes + 2, fileNameNBytes);
+    return name;
+}
+
+unsigned char *getControlPacket(const unsigned int c, const char *filename, long int length, unsigned int *size)
+{
+
+    const int L1 = (int)ceil(log2f((float)length) / 8.0);
+    const int L2 = strlen(filename);
+    *size = 1 + 2 + L1 + 2 + L2;
+    unsigned char *packet = (unsigned char *)malloc(*size);
+
+    unsigned int pos = 0;
+    packet[pos++] = c;
+    packet[pos++] = 0;
+    packet[pos++] = L1;
+
+    for (unsigned char i = 0; i < L1; i++)
+    {
+        packet[2 + L1 - i] = length & 0xFF;
+        length >>= 8;
+    }
+    pos += L1;
+    packet[pos++] = 1;
+    packet[pos++] = L2;
+    memcpy(packet + pos, filename, L2);
+    return packet;
+}
+
+unsigned char *getDataPacket(unsigned char sequence, unsigned char *data, int dataSize, int *packetSize)
+{
+
+    *packetSize = 1 + 1 + 2 + dataSize;
+    unsigned char *packet = (unsigned char *)malloc(*packetSize);
+
+    packet[0] = 1;
+    packet[1] = sequence;
+    packet[2] = dataSize >> 8 & 0xFF;
+    packet[3] = dataSize & 0xFF;
+    memcpy(packet + 4, data, dataSize);
+
+    return packet;
+}
+
+unsigned char *getData(FILE *fd, long int fileLength)
+{
+    unsigned char *content = (unsigned char *)malloc(sizeof(unsigned char) * fileLength);
+    fread(content, sizeof(unsigned char), fileLength, fd);
+    return content;
+}
+
+void parseDataPacket(const unsigned char *packet, const unsigned int packetSize, unsigned char *buffer)
+{
+    memcpy(buffer, packet + 4, packetSize - 4);
+    buffer += packetSize + 4;
+}
 
 void applicationLayer(const char *serialPort, const char *role, int baudRate, int nTries, int timeout, const char *filename)
 {
+    printf("hello");
     LinkLayer connectionParameters;
     strcpy(connectionParameters.serialPort, serialPort);
     connectionParameters.baudRate = baudRate;
     connectionParameters.nRetransmissions = nTries;
     connectionParameters.timeout = timeout;
-    
+
     if (strcmp(role, "tx") == 0)
     {
         connectionParameters.role = LlTx;
@@ -28,77 +106,103 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate, in
         return;
     }
 
-    if (llopen(connectionParameters) < 0)
+    int var = llopen(connectionParameters);
+
+    if (var < 0)
     {
-        printf("Error: failed to open the link layer connection.\n");
-        return;
+        printf("bye");
+        exit(-1);
     }
 
-    if (connectionParameters.role == LlTx)  
+    // if (llopen(connectionParameters) < 0)
+    //{
+    //     printf("Error: failed to open the link layer connection.\n");
+    //     return;
+    // }
+
+    if (connectionParameters.role == LlTx)
     {
         FILE *file = fopen(filename, "rb");
         if (file == NULL)
         {
-            printf("Error: could not open file %s for reading.\n", filename);
-            llclose(FALSE);
-            return;
+            perror(".");
+            exit(-1);
         }
 
-        unsigned char buffer[MAX_PAYLOAD_SIZE];
-        size_t bytesRead;
-        while ((bytesRead = fread(buffer, 1, MAX_PAYLOAD_SIZE, file)) > 0)
+        int prev = ftell(file);
+        fseek(file, 0L, SEEK_END);
+        long int fileSize = ftell(file) - prev;
+        fseek(file, prev, SEEK_SET);
+
+        unsigned int cpSize;
+        unsigned char *controlPacketStart = getControlPacket(2, filename, fileSize, &cpSize);
+        if (llwrite(controlPacketStart, cpSize) == -1)
         {
-            if (llwrite(buffer, bytesRead) < 0)
+            printf("Exit: error in start packet\n");
+            exit(-1);
+        }
+
+        unsigned char sequence = 0;
+        unsigned char *content = getData(file, fileSize);
+        long int bytesLeft = fileSize;
+
+        while (bytesLeft >= 0)
+        {
+
+            int dataSize = bytesLeft > (long int)MAX_PAYLOAD_SIZE ? MAX_PAYLOAD_SIZE : bytesLeft;
+            unsigned char *data = (unsigned char *)malloc(dataSize);
+            memcpy(data, content, dataSize);
+            int packetSize;
+            unsigned char *packet = getDataPacket(sequence, data, dataSize, &packetSize);
+
+            if (llwrite(packet, packetSize) == -1)
             {
-                printf("Error: failed to send data to the link layer.\n");
-                fclose(file);
-                llclose(FALSE);
-                return;
+                printf("Exit: error in data packets\n");
+                exit(-1);
             }
+
+            bytesLeft -= (long int)MAX_PAYLOAD_SIZE;
+            content += dataSize;
+            sequence = (sequence + 1) % 255;
         }
 
-        fclose(file);
-
-        if (llclose(TRUE) < 0)
+        unsigned char *controlPacketEnd = getControlPacket(3, filename, fileSize, &cpSize);
+        if (llwrite( controlPacketEnd, cpSize) == -1)
         {
-            printf("Error: failed to close the link layer connection.\n");
-            return;
+            printf("Exit: error in end packet\n");
+            exit(-1);
         }
+        llclose(TRUE);
 
-        printf("File transmission completed successfully.\n");
     }
-    else if (connectionParameters.role == LlRx)  
+    else if (connectionParameters.role == LlRx)
     {
-        FILE *file = fopen(filename, "wb");
-        if (file == NULL)
-        {
-            printf("Error: could not open file %s for writing.\n", filename);
-            llclose(FALSE);
-            return;
-        }
+        unsigned char *packet = (unsigned char *)malloc(MAX_PAYLOAD_SIZE);
+        int packetSize = -1;
+        while ((packetSize = llread( packet)) < 0)
+            ;
+        unsigned long int rxFileSize = 0;
+        unsigned char *name = parseControlPacket(packet, packetSize, &rxFileSize);
 
-        unsigned char buffer[MAX_PAYLOAD_SIZE];
-        int bytesRead;
-        while ((bytesRead = llread(buffer)) > 0)
+        FILE *newFile = fopen((char *)name, "wb+");
+        while (1)
         {
-            if (fwrite(buffer, 1, bytesRead, file) < bytesRead)
+            while ((packetSize = llread( packet)) < 0)
+                ;
+            if (packetSize == 0)
+                break;
+            else if (packet[0] != 3)
             {
-                printf("Error: failed to write data to the file.\n");
-                fclose(file);
-                llclose(FALSE);
-                return;
+                unsigned char *buffer = (unsigned char *)malloc(packetSize);
+                parseDataPacket(packet, packetSize, buffer);
+                fwrite(buffer, sizeof(unsigned char), packetSize - 4, newFile);
+                free(buffer);
             }
+            else
+                continue;
         }
 
-        fclose(file);
-
-        if (llclose(TRUE) < 0)
-        {
-            printf("Error: failed to close the link layer connection.\n");
-            return;
-        }
-
-        printf("File reception completed successfully.\n");
+        fclose(newFile);
     }
     else
     {

@@ -39,7 +39,7 @@ typedef struct
 
 #define C_I0 0x00
 #define C_I1 0x80
-#define C_RR0 0xA1
+#define C_RR0 0xAA
 #define C_RR1 0xAB
 #define C_REJ0 0x54
 #define C_REJ1 0x55
