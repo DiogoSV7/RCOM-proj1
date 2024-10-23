@@ -17,14 +17,16 @@
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename);
 
-unsigned char* parseControlPacket(unsigned char* packet, int size, unsigned long int *fileSize);
+long int findFileSize(FILE *file);
 
-void parseDataPacket(const unsigned char* packet, const unsigned int packetSize, unsigned char* buffer);
+unsigned char *buildControlPacket(const char *filename, long int filesize, unsigned int *length);
 
-unsigned char * getControlPacket(const unsigned int c, const char* filename, long int length, unsigned int* size);
+void buildDataPacket(FILE* file, unsigned char *dataPacket, int dataSize, unsigned char identifier);
 
-unsigned char * getDataPacket(unsigned char sequence, unsigned char *data, int dataSize, int *packetSize);
+long int extractFileSize(unsigned char* packet);
 
-unsigned char * getData(FILE* fd, long int fileLength);
+unsigned char* extractFileName(unsigned char* packet);
+
+void extractData(unsigned char* packet, unsigned char* buffer, int datasize);
 
 #endif // _APPLICATION_LAYER_H_

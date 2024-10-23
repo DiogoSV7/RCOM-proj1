@@ -18,6 +18,7 @@ typedef enum {
     C_RCV,
     BCC_OK,
     PAYLOAD,
+    PAYLOAD_ESC,
     BCC2_OK,
     STOP
 } StateMachine;

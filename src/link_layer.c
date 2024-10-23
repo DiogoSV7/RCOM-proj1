@@ -8,8 +8,8 @@
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
 
-static int trama_transmiter = 0;
-static int trama_receiver = 1;
+unsigned char trama_transmiter = 0x00;
+unsigned char trama_receiver = 0x01;
 int alarmCount = 0;
 volatile int alarmEnabled = FALSE;
 int transmissoes = 0;
@@ -245,11 +245,11 @@ int llwrite(const unsigned char *buf, int bufSize)
     unsigned char buffer[MAX_PAYLOAD_SIZE * 3];
     buffer[0] = FLAG;
     buffer[1] = ADDR_SSAR;
-    if (trama_transmiter == 0)
+    if ((trama_transmiter & 0x01) == 0x00)
     {
         buffer[2] = C_I0;
     }
-    else if (trama_transmiter == 1)
+    else if ((trama_transmiter & 0x01) == 0x01)
     {
         buffer[2] = C_I1;
     }
@@ -344,21 +344,27 @@ int llwrite(const unsigned char *buf, int bufSize)
             {
                 printf("Comparei o campo C");
                 fflush(stdout);
-                if (trama_transmiter == 1)
-                {
-                    trama_transmiter = 0;
-                }
-                else
-                {
-                    trama_transmiter = 1;
-                }
+                //if (trama_transmiter == 1)
+               // {
+              //      trama_transmiter = 0;
+              //  }
+              //  else
+               // {
+               //     trama_transmiter = 1;
+                //}
+                if ((trama_transmiter & 0x01) == 0x00)
+                    {
+                        trama_transmiter = 0x01;
+                    }
+                    else if ((trama_transmiter & 0x01) == 0x01)
+                    {
+                        trama_transmiter = 0x00;
+                    }
+                
                 aceite = 1;
                 printf("trama transmiter= %i", trama_transmiter);
                 printf("aceite= %i", aceite);
                 fflush(stdout);
-            }
-            else if(!campoC){
-                continue;
             }
             else if (campoC == C_REJ0 || campoC == C_REJ1)
             {
@@ -421,7 +427,7 @@ int llread(unsigned char *packet)
                 {
                     estado = A_RCV;
                 }
-                else if (buffer != FLAG)
+                else
                 {
                     estado = START;
                 }
@@ -452,7 +458,7 @@ int llread(unsigned char *packet)
             case C_RCV:
                 if (buffer == (ADDR_SSAR ^ campoC))
                 {
-                    estado = BCC_OK;
+                    estado = PAYLOAD;
                 }
                 else if (buffer == FLAG)
                 {
@@ -464,16 +470,14 @@ int llread(unsigned char *packet)
                 }
                 break;
 
-            case BCC_OK:
-                estado = PAYLOAD;
-                break;
+
 
             case PAYLOAD:
                 if (buffer == FLAG)
                 {
                     unsigned char bcc2 = packet[indice - 1];
                     indice--;
-
+                    
                     first_byte_of_payload = packet[0];
                     for (unsigned int w = 1; w < indice; w++)
                     {
@@ -483,28 +487,29 @@ int llread(unsigned char *packet)
                     if (bcc2 == first_byte_of_payload)
                     {
                         estado = STOP;
-                        unsigned char trama[5] = {FLAG, ADDR_SRAS, (trama_receiver == 1 ? C_I1 : C_I0), ADDR_SRAS ^ (trama_receiver == 1 ? C_I1 : C_I0), FLAG};
-                        if (trama_receiver == 0)
+                        unsigned char trama[5] = {FLAG, ADDR_SRAS, (trama_receiver == 0x01 ? C_RR1 : C_RR0), ADDR_SRAS ^ (trama_receiver == 0x01 ? C_RR1 : C_RR0), FLAG};
+                        if ((trama_receiver & 0x01) == 0x00)
                         {
-                            trama_receiver = 1;
+                            trama_receiver = 0x01;
                         }
-                        else
+                        else if ((trama_receiver & 0x01) == 0x01)
                         {
-                            trama_receiver = 0;
+                            trama_receiver = 0x00;
                         }
                         writeBytesSerialPort(trama, 5);
+
                         return indice;
                     }
                     else
                     {
-                        unsigned char trama[5] = {FLAG, ADDR_SRAS, (trama_receiver == 1 ? C_REJ1 : C_REJ0), ADDR_SRAS ^ (trama_receiver == 1 ? C_REJ1 : C_REJ0), FLAG};
-                        if (trama_receiver == 0)
+                        unsigned char trama[5] = {FLAG, ADDR_SRAS, (trama_receiver == 0x01 ? C_REJ1 : C_REJ0), ADDR_SRAS ^ (trama_receiver == 0x01 ? C_REJ1 : C_REJ0), FLAG};
+                        if ((trama_receiver & 0x01) == 0x00)
                         {
-                            trama_receiver = 1;
+                            trama_receiver = 0x01;
                         }
-                        else
+                        else if ((trama_receiver & 0x01) == 0x01)
                         {
-                            trama_receiver = 0;
+                            trama_receiver = 0x00;
                         }
                         writeBytesSerialPort(trama, 5);
                         return -1;
@@ -512,8 +517,18 @@ int llread(unsigned char *packet)
                 }
                 else if (buffer == ESC)
                 {
+                    estado = PAYLOAD_ESC;
+                }
+                else
+                {
+                    packet[indice++] = buffer;
+                }
+                break;
 
-                    if (buffer == FLAG || buffer == ESC)
+
+            case PAYLOAD_ESC:
+                estado = PAYLOAD;
+                if (buffer == FLAG || buffer == ESC)
                     {
                         packet[indice++] = buffer;
                     }
@@ -522,17 +537,14 @@ int llread(unsigned char *packet)
                         packet[indice++] = ESC;
                         packet[indice++] = buffer;
                     }
-                }
-                else
-                {
-                    packet[indice++] = buffer;
-                }
+
                 break;
 
             default:
                 // estado = START;
                 break;
             }
+            
         }
     }
     return -1;
@@ -552,7 +564,7 @@ int llclose(int showStatistics)
         exit(EXIT_FAILURE);
     }
     int retransmitions = transmissoes;
-    while (estado != STOP && retransmitions != 0)
+    while (estado != STOP && retransmitions > 0)
     {
         unsigned char trama[5] = {FLAG, ADDR_SSAR, DISC, ADDR_SSAR ^ DISC, FLAG};
         if (writeBytesSerialPort(trama, 5) != 0)
@@ -578,7 +590,7 @@ int llclose(int showStatistics)
                     {
                         estado = A_RCV;
                     }
-                    else if (buffer != FLAG)
+                    else
                     {
                         estado = START;
                     }
@@ -649,7 +661,7 @@ unsigned char frame_control_check()
 
     while (estado != STOP && alarmEnabled == FALSE)
     {
-        if (readByteSerialPort(&byte) > 0 || 1)
+        if (readByteSerialPort(&byte) > 0 )
         {
             if (estado == START)
             {
@@ -684,7 +696,7 @@ unsigned char frame_control_check()
                 {
                     estado = FLAG_RCV;
                 }
-                else if (byte == C_RR0 || byte == C_RR1 || byte == C_REJ0 || byte == C_REJ1 || byte == DISC)
+                else if (byte == C_RR0 || byte == C_RR1 || byte == C_REJ0 || byte == C_REJ1 || byte == CNTRL_SET)
                 {
                     estado = C_RCV;
                     campoC = byte;
