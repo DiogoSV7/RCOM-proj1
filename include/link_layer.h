@@ -46,6 +46,7 @@ typedef struct
 #define C_REJ1 0x55
 #define DISC 0x0B
 
+#define NTRAMA(ns) (ns << 7)
 
 #define FLAG 0x7E
 #define ESC 0x7D
@@ -86,5 +87,7 @@ int llread(unsigned char *packet);
 int llclose(int showStatistics);
 
 unsigned char frame_control_check();
+
+int escrever_frame(unsigned char A, unsigned char C);
 
 #endif // _LINK_LAYER_H_

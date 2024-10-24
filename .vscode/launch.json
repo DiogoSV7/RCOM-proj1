@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "C/C++ Runner: Debug Session",
+      "type": "lldb",
+      "request": "launch",
+      "args": [],
+      "cwd": "/Users/diogovieira/Desktop/FACUL/RC - Redes de Computadores/RCOM-proj1-master",
+      "program": "/Users/diogovieira/Desktop/FACUL/RC - Redes de Computadores/RCOM-proj1-master/build/Debug/outDebug"
+    }
+  ]
+}
