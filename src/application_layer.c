@@ -11,7 +11,6 @@
 #include <sys/stat.h>
 #include <termios.h>
 #include <unistd.h>
-#include <math.h>
 
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
@@ -134,27 +133,35 @@ unsigned char* parseControlPacket(unsigned char* packet, int size, unsigned long
 }
 
 unsigned char * getControlPacket(const unsigned int c, const char* filename, long int length, unsigned int* size){
+    int L1 = 0;
+    long int temp_length = length;
+    while (temp_length > 0) {
+        temp_length >>= 8;
+        L1++;
+    }
 
-    const int L1 = (int) ceil(log2f((float)length)/8.0);
-    const int L2 = strlen(filename);
-    *size = 1+2+L1+2+L2;
+    if (L1 == 0) L1 = 1;
+
+    int L2 = strlen(filename);
+    *size = 1 + 2 + L1 + 2 + L2;
     unsigned char *packet = (unsigned char*)malloc(*size);
-    
-    unsigned int pos = 0;
-    packet[pos++]=c;
-    packet[pos++]=0;
-    packet[pos++]=L1;
 
-    for (unsigned char i = 0 ; i < L1 ; i++) {
-        packet[2+L1-i] = length & 0xFF;
+    unsigned int pos = 0;
+    packet[pos++] = c;
+    packet[pos++] = 0;
+    packet[pos++] = L1;
+
+    for (unsigned char i = 0; i < L1; i++) {
+        packet[2 + L1 - i] = length & 0xFF;
         length >>= 8;
     }
-    pos+=L1;
-    packet[pos++]=1;
-    packet[pos++]=L2;
-    memcpy(packet+pos, filename, L2);
+    pos += L1;
+    packet[pos++] = 1;
+    packet[pos++] = L2;
+    memcpy(packet + pos, filename, L2);
     return packet;
 }
+
 
 unsigned char * getDataPacket(unsigned char sequence, unsigned char *data, int dataSize, int *packetSize){
 
