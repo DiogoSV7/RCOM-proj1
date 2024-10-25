@@ -32,7 +32,6 @@ void alarmHandler(int signal)
 ////////////////////////////////////////////////
 int llopen(LinkLayer connectionParameters)
 {
-    printf("i");
     StateMachine estado = START;
     int var = openSerialPort(connectionParameters.serialPort, connectionParameters.baudRate);
 
@@ -241,8 +240,6 @@ int llwrite(const unsigned char *buf, int bufSize)
     for(int i =1; i< bufSize; i++){
         bcc2 ^= buf[i];
     }
-    printf(" Received byte: 0x%02X\n", buffer);
-    fflush(stdout);
 
     int w = 4;
     for (int i = 0; i < bufSize; i++)
@@ -284,12 +281,10 @@ int llwrite(const unsigned char *buf, int bufSize)
 
 
     printf("Construi o buffer inteiro");
-    printf(" Received byte: 0x%02X\n", buffer);
-    fflush(stdout);
+
     while (tentativa_atual < transmissoes)
     {
-        printf("Tentei transmitir");
-        fflush(stdout);
+
         alarmEnabled = FALSE;
         alarm(intervalo);
         aceite = 0;
@@ -300,14 +295,9 @@ int llwrite(const unsigned char *buf, int bufSize)
             {
                 return -1;
             }
-            printf("CHEGUEI ANTES DO CAMPO C");
-            fflush(stdout);
 
             unsigned char campoC = frame_control_check();
 
-            printf("CHEGUEI AO CAMPO C");
-            printf(" Received byte: 0x%02X\n", campoC);
-            fflush(stdout);
 
             if (campoC == C_RR0 || campoC == C_RR1)
             {
@@ -335,8 +325,7 @@ int llwrite(const unsigned char *buf, int bufSize)
     }
     else
     {
-        printf("deuMERDAAAA");
-        llclose(FALSE);
+        //llclose(FALSE);
         return -1;
     }
 }
@@ -512,29 +501,41 @@ int llread(unsigned char *packet)
 ////////////////////////////////////////////////
 // LLCLOSE
 ////////////////////////////////////////////////
-int llclose(int showStatistics)
+int llclose(int showStatistics,LinkLayer connectionParameters)
 {
     StateMachine estado = START;
+
+    LinkLayerRole r = connectionParameters.role;
+
     unsigned char buffer;
-    struct sigaction act = {0};
-    act.sa_handler = &alarmHandler;
-    if (sigaction(SIGALRM, &act, NULL) == -1)
+    transmissoes = connectionParameters.nRetransmissions;
+    int retransmitions = connectionParameters.nRetransmissions;
+    intervalo = connectionParameters.timeout;
+
+    switch (r)
     {
-        perror("sigaction");
-        exit(EXIT_FAILURE);
-    }
-    int retransmitions = transmissoes;
-    while (estado != STOP && retransmitions != 0)
+    case LlTx:
     {
-        escrever_frame(ADDR_SSAR, DISC);
-        alarm(intervalo);
-        alarmEnabled = FALSE;
-        while (alarmEnabled == FALSE && estado != STOP)
+        struct sigaction act = {0};
+        act.sa_handler = &alarmHandler;
+        if (sigaction(SIGALRM, &act, NULL) == -1)
         {
-            if (readByteSerialPort(&buffer) > 0)
+            perror("sigaction");
+            exit(EXIT_FAILURE);
+        }
+        while (retransmitions > 0 && estado != STOP)
+        {
+           
+            escrever_frame(ADDR_SSAR, DISC);
+            alarm(intervalo);
+            alarmEnabled = FALSE;
+            while (alarmEnabled == FALSE && estado != STOP)
             {
-                if (estado == START)
+                if (readByteSerialPort(&buffer) > 0)
                 {
+                    if (estado == START)
+                {
+                    printf("Estado: START\n");
                     if (buffer == FLAG)
                     {
                         estado = FLAG_RCV;
@@ -542,17 +543,19 @@ int llclose(int showStatistics)
                 }
                 else if (estado == FLAG_RCV)
                 {
+                    printf("Estado: FLAG_RCV\n");
                     if (buffer == ADDR_SRAS)
                     {
                         estado = A_RCV;
                     }
-                    else
+                    else if (buffer != FLAG)
                     {
                         estado = START;
                     }
                 }
                 else if (estado == A_RCV)
                 {
+                    printf("Estado: A_RCV\n");
                     if (buffer == FLAG)
                     {
                         estado = FLAG_RCV;
@@ -568,6 +571,7 @@ int llclose(int showStatistics)
                 }
                 else if (estado == C_RCV)
                 {
+                    printf("Estado: C_RCV\n");
                     if (buffer == (ADDR_SRAS ^ DISC))
                     {
                         estado = BCC_OK;
@@ -583,6 +587,89 @@ int llclose(int showStatistics)
                 }
                 else if (estado == BCC_OK)
                 {
+                    printf("Estado: BCC_OK\n");
+                    if (buffer == FLAG)
+                    {
+                        estado = STOP;
+                    }
+                    else
+                    {
+                        estado = START;
+                    }
+                }
+                }
+            }
+            retransmitions--;
+        }
+        if (estado != STOP)
+        {
+            return -1;
+        }
+        escrever_frame(ADDR_SSAR, CNTRL_UA);
+        break;
+    }
+
+    case LlRx:
+    {
+        while (estado != STOP)
+        {
+            if (readByteSerialPort(&buffer) > 0)
+            {
+                if (estado == START)
+                {
+                    printf("Estado: START\n");
+                    if (buffer == FLAG)
+                    {
+                        estado = FLAG_RCV;
+                    }
+                }
+                else if (estado == FLAG_RCV)
+                {
+                    printf("Estado: FLAG_RCV\n");
+                    if (buffer == ADDR_SSAR)
+                    {
+                        estado = A_RCV;
+                    }
+                    else if (buffer != FLAG)
+                    {
+                        estado = START;
+                    }
+                }
+                else if (estado == A_RCV)
+                {
+                    printf("Estado: A_RCV\n");
+                    if (buffer == FLAG)
+                    {
+                        estado = FLAG_RCV;
+                    }
+                    else if (buffer == DISC)
+                    {
+                        estado = C_RCV;
+                    }
+                    else
+                    {
+                        estado = START;
+                    }
+                }
+                else if (estado == C_RCV)
+                {
+                    printf("Estado: C_RCV\n");
+                    if (buffer == (ADDR_SSAR ^ DISC))
+                    {
+                        estado = BCC_OK;
+                    }
+                    else if (buffer == FLAG)
+                    {
+                        estado = FLAG_RCV;
+                    }
+                    else
+                    {
+                        estado = START;
+                    }
+                }
+                else if (estado == BCC_OK)
+                {
+                    printf("Estado: BCC_OK\n");
                     if (buffer == FLAG)
                     {
                         estado = STOP;
@@ -594,13 +681,19 @@ int llclose(int showStatistics)
                 }
             }
         }
-        retransmitions--;
+        
+        escrever_frame(ADDR_SRAS,DISC);
+
+        break;
     }
-    if (estado != STOP)
+
+    default:
     {
         return -1;
+        break;
     }
-    escrever_frame(ADDR_SSAR, CNTRL_UA);
+    }
+    printf("Finished successfully\n");
     return closeSerialPort();
 }
 
@@ -627,7 +720,7 @@ unsigned char frame_control_check()
             else if (estado == FLAG_RCV)
             {
                 printf("Cheguei ao FLAG_RCV\n");
-                fflush(stdout);
+
                 if (byte == ADDR_SSAR)
                 {
                     estado = A_RCV;
@@ -641,7 +734,7 @@ unsigned char frame_control_check()
             {
                 printf("Cheguei ap A_RCV\n");
                 printf(" Received byte: 0x%02X\n", byte);
-                fflush(stdout);
+
                 if (byte == FLAG)
                 {
                     estado = FLAG_RCV;

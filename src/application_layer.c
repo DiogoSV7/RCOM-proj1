@@ -78,7 +78,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 printf("Exit: error in end packet\n");
                 exit(-1);
             }
-            llclose(fd);
+            llclose(fd,linkLayer);
             break;
         }
 
@@ -107,7 +107,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             }
 
             fclose(newFile);
+            llclose(fd,linkLayer);
             break;
+
         }
         default:
             exit(-1);
