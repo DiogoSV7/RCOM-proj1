@@ -100,7 +100,6 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                     free(buffer);
                 }
                 else{
-                    printf("End Control Packet Received:\n");
                     break;
                 };
             }

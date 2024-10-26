@@ -32,7 +32,11 @@ all: $(BIN)/main $(BIN)/cable
 $(BIN)/main: main.c $(SRC)/*.c
 	$(CC) $(CFLAGS) -o $@ $^ -I$(INCLUDE)
 
+ifeq ($(OS), Linux)
 $(BIN)/cable: $(CABLE_DIR)/cable.c
+else
+$(BIN)/cable: $(CABLE_DIR)/cable_macos.c
+endif
 	$(CC) $(CFLAGS) -o $@ $^
 
 .PHONY: run_tx

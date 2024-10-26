@@ -88,6 +88,5 @@ int llclose(int showStatistics,LinkLayer connectionParameters);
 
 unsigned char frame_control_check();
 
-int escrever_frame(unsigned char A, unsigned char C);
 
 #endif // _LINK_LAYER_H_
