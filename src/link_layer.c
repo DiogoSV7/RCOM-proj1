@@ -371,6 +371,10 @@ int llread(unsigned char *packet)
                 {
                     estado = C_RCV;
                     campoC = buffer;
+                }else if(buffer == DISC){
+                    unsigned char trama[5] = {FLAG, ADDR_SRAS, DISC, ADDR_SRAS^DISC, FLAG};
+                    writeBytesSerialPort(trama,5);
+                    return 0;
                 }
                 else
                 {
@@ -430,13 +434,13 @@ int llread(unsigned char *packet)
                                 writeBytesSerialPort(trama,5);
                                 trama_receiver = (trama_receiver +1) %2;
                                 printf("Received duplicate correct frame, asked to send the next one!\n");
-                                return 0;
+                                return indice_atual;
                             }else{
                                 unsigned char trama[5] = {FLAG, ADDR_SSAR, C_RR1, ADDR_SSAR^C_RR1, FLAG};
                                 writeBytesSerialPort(trama,5);
                                 trama_receiver = (trama_receiver +1) %2;
                                 printf("Received duplicate correct frame, asked to send the next one!\n");
-                                return 0;
+                                return indice_atual;
                             }
                         }
                     }
@@ -462,13 +466,13 @@ int llread(unsigned char *packet)
                                 writeBytesSerialPort(trama,5);
                                 trama_receiver = (trama_receiver +1) %2;
                                 printf("Received wrong frame duplicated with the ID 0.\n");
-                                return 0;
+                                return indice_atual;
                             }else{
                                 unsigned char trama[5] = {FLAG, ADDR_SSAR,C_RR1 , ADDR_SSAR^C_RR1, FLAG};
                                 writeBytesSerialPort(trama,5);
                                 trama_receiver = (trama_receiver +1) %2;
                                 printf("Received wrong frame duplicated with the ID 1 .\n");
-                                return 0;
+                                return indice_atual;
                             }
                         }
                     }
@@ -730,7 +734,7 @@ unsigned char frame_control_check()
                 {
                     estado = FLAG_RCV;
                 }
-                else if (buffer == C_RR0 || buffer == C_RR1 || buffer == C_REJ0 || buffer == C_REJ1 || buffer==CNTRL_SET)
+                else if (buffer == C_RR0 || buffer == C_RR1 || buffer == C_REJ0 || buffer == C_REJ1 || buffer==CNTRL_SET || buffer ==DISC)
                 {
                     estado = C_RCV;
                     campoC = buffer;
