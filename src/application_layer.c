@@ -54,7 +54,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             unsigned char* content = getData(file, fileSize);
             long int bytesLeft = fileSize;
 
-            while (bytesLeft >= 0) { 
+            while (bytesLeft > 0) { 
 
                 int dataSize = bytesLeft > (long int) MAX_PAYLOAD_SIZE ? MAX_PAYLOAD_SIZE : bytesLeft;
                 unsigned char* data = (unsigned char*) malloc(dataSize);
@@ -85,13 +85,13 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
             unsigned char *packet = (unsigned char *)malloc(MAX_PAYLOAD_SIZE);
             int packetSize = -1;
-            while ((packetSize = llread(packet)) < 0);
+            while ((packetSize = llread(packet)) <= 0);
             unsigned long int rxFileSize = 0;
             unsigned char* name = parseControlPacket(packet, packetSize, &rxFileSize); 
 
             FILE* newFile = fopen((char *) filename, "wb+");
             while (1) {    
-                while ((packetSize = llread(packet)) < 0);
+                while ((packetSize = llread(packet)) <= 0);
                 if(packetSize == 0) break;
                 else if(packet[0] != 3){
                     unsigned char *buffer = (unsigned char*)malloc(packetSize);

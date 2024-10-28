@@ -434,13 +434,13 @@ int llread(unsigned char *packet)
                                 writeBytesSerialPort(trama,5);
                                 trama_receiver = (trama_receiver +1) %2;
                                 printf("Received duplicate correct frame, asked to send the next one!\n");
-                                return indice_atual;
+                                return 0;
                             }else{
                                 unsigned char trama[5] = {FLAG, ADDR_SSAR, C_RR1, ADDR_SSAR^C_RR1, FLAG};
                                 writeBytesSerialPort(trama,5);
                                 trama_receiver = (trama_receiver +1) %2;
                                 printf("Received duplicate correct frame, asked to send the next one!\n");
-                                return indice_atual;
+                                return 0;
                             }
                         }
                     }
@@ -466,13 +466,13 @@ int llread(unsigned char *packet)
                                 writeBytesSerialPort(trama,5);
                                 trama_receiver = (trama_receiver +1) %2;
                                 printf("Received wrong frame duplicated with the ID 0.\n");
-                                return indice_atual;
+                                return 0;
                             }else{
                                 unsigned char trama[5] = {FLAG, ADDR_SSAR,C_RR1 , ADDR_SSAR^C_RR1, FLAG};
                                 writeBytesSerialPort(trama,5);
                                 trama_receiver = (trama_receiver +1) %2;
                                 printf("Received wrong frame duplicated with the ID 1 .\n");
-                                return indice_atual;
+                                return 0;
                             }
                         }
                     }
