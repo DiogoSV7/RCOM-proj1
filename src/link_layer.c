@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <errno.h> 
+#include <errno.h>
 
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
@@ -16,7 +16,7 @@ volatile int alarmEnabled = FALSE;
 int transmissoes = 0;
 int intervalo = 0;
 extern int fd;
-char* serialPort;
+char *serialPort;
 int baudrate;
 LinkLayer layerzinha;
 // Se bcc1 estiver errado, não devo fazer nada, significa que o cabeçalho está errado e tenho de deitar tudo fora, esperar que do lado do transmissor de timeout e esperar que envie outra vez
@@ -64,8 +64,8 @@ int llopen(LinkLayer connectionParameters)
         }
         while (retransmitions > 0 && estado != STOP)
         {
-            unsigned char trama[5] = {FLAG, ADDR_SSAR,CNTRL_SET , ADDR_SSAR^CNTRL_SET, FLAG};
-            writeBytesSerialPort(trama,5);
+            unsigned char trama[5] = {FLAG, ADDR_SSAR, CNTRL_SET, ADDR_SSAR ^ CNTRL_SET, FLAG};
+            writeBytesSerialPort(trama, 5);
             printf("Tried to establish connection with the Receiver!\n");
             alarm(intervalo);
             alarmEnabled = FALSE;
@@ -214,8 +214,8 @@ int llopen(LinkLayer connectionParameters)
                 }
             }
         }
-        unsigned char trama[5] = {FLAG, ADDR_SRAS, CNTRL_UA, ADDR_SRAS^CNTRL_UA, FLAG};
-        writeBytesSerialPort(trama,5);
+        unsigned char trama[5] = {FLAG, ADDR_SRAS, CNTRL_UA, ADDR_SRAS ^ CNTRL_UA, FLAG};
+        writeBytesSerialPort(trama, 5);
         printf("Connection has been established with the Transmiter\n");
         break;
     }
@@ -240,14 +240,15 @@ int llwrite(const unsigned char *buf, int bufSize)
     int rejeitado = 0;
     int aceite = 0;
     int size_frame = bufSize + 6;
-    unsigned char *buffer = (unsigned char*) malloc(size_frame);
+    unsigned char *buffer = (unsigned char *)malloc(size_frame);
     unsigned char bcc2 = buf[0];
     buffer[0] = FLAG;
     buffer[1] = ADDR_SSAR;
     buffer[2] = NTRAMA(trama_transmiter);
     buffer[3] = buffer[1] ^ buffer[2];
 
-    for(int i =1; i< bufSize; i++){
+    for (int i = 1; i < bufSize; i++)
+    {
         bcc2 ^= buf[i];
     }
 
@@ -271,17 +272,20 @@ int llwrite(const unsigned char *buf, int bufSize)
             buffer[w++] = buf[i];
         }
     }
-    if(bcc2 == FLAG){
+    if (bcc2 == FLAG)
+    {
         buffer = realloc(buffer, size_frame);
         buffer[w++] = ESC;
-        buffer[w++] = OCT_RPL_FLAG;   
+        buffer[w++] = OCT_RPL_FLAG;
     }
-    else if(bcc2 == ESC){
+    else if (bcc2 == ESC)
+    {
         buffer = realloc(buffer, size_frame);
         buffer[w++] = ESC;
-        buffer[w++] = OCT_RPL_ESC;   
+        buffer[w++] = OCT_RPL_ESC;
     }
-    else{
+    else
+    {
         buffer[w++] = bcc2;
     }
 
@@ -294,9 +298,9 @@ int llwrite(const unsigned char *buf, int bufSize)
         alarm(intervalo);
         aceite = 0;
         rejeitado = 0;
-        while (alarmEnabled == FALSE && aceite==0 && !rejeitado)
+        while (alarmEnabled == FALSE && aceite == 0 && !rejeitado)
         {
-            if (writeBytesSerialPort(buffer, w)<0)
+            if (writeBytesSerialPort(buffer, w) < 0)
             {
                 printf("Error in writting bytes!\n");
                 exit(-1);
@@ -304,11 +308,10 @@ int llwrite(const unsigned char *buf, int bufSize)
 
             unsigned char campoC = frame_control_check();
 
-
             if (campoC == C_RR0 || campoC == C_RR1)
             {
                 aceite = 1;
-                trama_transmiter = (trama_transmiter +1) %2;
+                trama_transmiter = (trama_transmiter + 1) % 2;
             }
             else if (campoC == C_REJ0 || campoC == C_REJ1)
             {
@@ -356,15 +359,16 @@ int llread(unsigned char *packet)
     int indice_atual = 0;
     StateMachine estado = START;
     unsigned char campoC;
-    
-    while (estado != STOP && retries<transmissoes)
+
+    while (estado != STOP && retries < transmissoes)
     {
         alarm(intervalo);
-        alarmEnabled=FALSE;
-        while(alarmEnabled==FALSE && estado!=STOP){
-    
+        alarmEnabled = FALSE;
+        while (alarmEnabled == FALSE && estado != STOP)
+        {
+
             int r = readByteSerialPort(&buffer);
-            if (r>0)
+            if (r > 0)
             {
                 switch (estado)
                 {
@@ -395,9 +399,11 @@ int llread(unsigned char *packet)
                     {
                         estado = C_RCV;
                         campoC = buffer;
-                    }else if(buffer == DISC){
-                        unsigned char trama[5] = {FLAG, ADDR_SRAS, DISC, ADDR_SRAS^DISC, FLAG};
-                        writeBytesSerialPort(trama,5);
+                    }
+                    else if (buffer == DISC)
+                    {
+                        unsigned char trama[5] = {FLAG, ADDR_SRAS, DISC, ADDR_SRAS ^ DISC, FLAG};
+                        writeBytesSerialPort(trama, 5);
                         return 0;
                     }
                     else
@@ -421,14 +427,12 @@ int llread(unsigned char *packet)
                     }
                     break;
 
-
-
                 case PAYLOAD:
                     if (buffer == FLAG)
                     {
                         unsigned char bcc2 = packet[indice_atual - 1];
                         indice_atual--;
-                        
+
                         unsigned char first_byte_of_payload = 0;
                         for (int w = 0; w < indice_atual; w++)
                         {
@@ -438,31 +442,40 @@ int llread(unsigned char *packet)
                         if (bcc2 == first_byte_of_payload)
                         {
                             estado = STOP;
-                            if(NTRAMA(trama_receiver)!=campoC){
-                                if(trama_receiver == 0){
-                                    unsigned char trama[5] = {FLAG, ADDR_SSAR, C_RR0, ADDR_SSAR^C_RR0, FLAG};
-                                    writeBytesSerialPort(trama,5);
-                                    trama_receiver = (trama_receiver +1) %2;
-                                    printf("Received the correct frame, asked to send the next one!\n");
-                                    return indice_atual;
-                                }else{
-                                    unsigned char trama[5] = {FLAG, ADDR_SSAR, C_RR1, ADDR_SSAR^C_RR1, FLAG};
-                                    writeBytesSerialPort(trama,5);
-                                    trama_receiver = (trama_receiver +1) %2;
+                            if (NTRAMA(trama_receiver) != campoC)
+                            {
+                                if (trama_receiver == 0)
+                                {
+                                    unsigned char trama[5] = {FLAG, ADDR_SSAR, C_RR0, ADDR_SSAR ^ C_RR0, FLAG};
+                                    writeBytesSerialPort(trama, 5);
+                                    trama_receiver = (trama_receiver + 1) % 2;
                                     printf("Received the correct frame, asked to send the next one!\n");
                                     return indice_atual;
                                 }
-                            }else{
-                                if(trama_receiver == 0){
-                                    unsigned char trama[5] = {FLAG, ADDR_SSAR, C_RR0, ADDR_SSAR^C_RR0, FLAG};
-                                    writeBytesSerialPort(trama,5);
-                                    trama_receiver = (trama_receiver +1) %2;
+                                else
+                                {
+                                    unsigned char trama[5] = {FLAG, ADDR_SSAR, C_RR1, ADDR_SSAR ^ C_RR1, FLAG};
+                                    writeBytesSerialPort(trama, 5);
+                                    trama_receiver = (trama_receiver + 1) % 2;
+                                    printf("Received the correct frame, asked to send the next one!\n");
+                                    return indice_atual;
+                                }
+                            }
+                            else
+                            {
+                                if (trama_receiver == 0)
+                                {
+                                    unsigned char trama[5] = {FLAG, ADDR_SSAR, C_RR0, ADDR_SSAR ^ C_RR0, FLAG};
+                                    writeBytesSerialPort(trama, 5);
+                                    trama_receiver = (trama_receiver + 1) % 2;
                                     printf("Received duplicate correct frame, asked to send the next one!\n");
                                     return 0;
-                                }else{
-                                    unsigned char trama[5] = {FLAG, ADDR_SSAR, C_RR1, ADDR_SSAR^C_RR1, FLAG};
-                                    writeBytesSerialPort(trama,5);
-                                    trama_receiver = (trama_receiver +1) %2;
+                                }
+                                else
+                                {
+                                    unsigned char trama[5] = {FLAG, ADDR_SSAR, C_RR1, ADDR_SSAR ^ C_RR1, FLAG};
+                                    writeBytesSerialPort(trama, 5);
+                                    trama_receiver = (trama_receiver + 1) % 2;
                                     printf("Received duplicate correct frame, asked to send the next one!\n");
                                     return 0;
                                 }
@@ -470,29 +483,38 @@ int llread(unsigned char *packet)
                         }
                         else
                         {
-                            if(NTRAMA(trama_receiver)!=campoC){
-                                if(trama_receiver == 0){
-                                    unsigned char trama[5] = {FLAG, ADDR_SSAR, C_REJ0, ADDR_SSAR^C_REJ0, FLAG};
-                                    writeBytesSerialPort(trama,5);
+                            if (NTRAMA(trama_receiver) != campoC)
+                            {
+                                if (trama_receiver == 0)
+                                {
+                                    unsigned char trama[5] = {FLAG, ADDR_SSAR, C_REJ0, ADDR_SSAR ^ C_REJ0, FLAG};
+                                    writeBytesSerialPort(trama, 5);
                                     printf("Rejected frame with the ID 0.\n");
                                     return -1;
-                                }else{
-                                    unsigned char trama[5] = {FLAG, ADDR_SSAR, C_REJ1, ADDR_SSAR^C_REJ1, FLAG};
-                                    writeBytesSerialPort(trama,5);
+                                }
+                                else
+                                {
+                                    unsigned char trama[5] = {FLAG, ADDR_SSAR, C_REJ1, ADDR_SSAR ^ C_REJ1, FLAG};
+                                    writeBytesSerialPort(trama, 5);
                                     printf("Rejected frame with the ID 1.\n");
                                     return -1;
                                 }
-                            }else{
-                                if(trama_receiver == 0){
-                                    unsigned char trama[5] = {FLAG, ADDR_SSAR,C_RR0 , ADDR_SSAR^C_RR0, FLAG};
-                                    writeBytesSerialPort(trama,5);
-                                    trama_receiver = (trama_receiver +1) %2;
+                            }
+                            else
+                            {
+                                if (trama_receiver == 0)
+                                {
+                                    unsigned char trama[5] = {FLAG, ADDR_SSAR, C_RR0, ADDR_SSAR ^ C_RR0, FLAG};
+                                    writeBytesSerialPort(trama, 5);
+                                    trama_receiver = (trama_receiver + 1) % 2;
                                     printf("Received wrong frame duplicated with the ID 0.\n");
                                     return 0;
-                                }else{
-                                    unsigned char trama[5] = {FLAG, ADDR_SSAR,C_RR1 , ADDR_SSAR^C_RR1, FLAG};
-                                    writeBytesSerialPort(trama,5);
-                                    trama_receiver = (trama_receiver +1) %2;
+                                }
+                                else
+                                {
+                                    unsigned char trama[5] = {FLAG, ADDR_SSAR, C_RR1, ADDR_SSAR ^ C_RR1, FLAG};
+                                    writeBytesSerialPort(trama, 5);
+                                    trama_receiver = (trama_receiver + 1) % 2;
                                     printf("Received wrong frame duplicated with the ID 1 .\n");
                                     return 0;
                                 }
@@ -509,13 +531,15 @@ int llread(unsigned char *packet)
                     }
                     break;
 
-
                 case PAYLOAD_ESC:
                     estado = PAYLOAD;
                     printf("Destufing the packet number: %d\n", packet[1]);
-                    if(buffer == OCT_RPL_FLAG){
+                    if (buffer == OCT_RPL_FLAG)
+                    {
                         packet[indice_atual++] = FLAG;
-                    }else if(buffer==OCT_RPL_ESC){
+                    }
+                    else if (buffer == OCT_RPL_ESC)
+                    {
                         packet[indice_atual++] = ESC;
                     }
                     break;
@@ -523,15 +547,19 @@ int llread(unsigned char *packet)
                 default:
                     break;
                 }
-                
-            }else if (r == -1) {
+            }
+            else if (r == -1)
+            {
                 perror("Connection lost, attempting to reconnect...");
                 closeSerialPort();
                 fd = llopen(layerzinha);
-                if (fd < 0) {
+                if (fd < 0)
+                {
                     retries++;
                     printf("Reconnect failed, retrying (%d/%d)\n", retries, transmissoes);
-                } else {
+                }
+                else
+                {
                     printf("Reconnected successfully, resuming...\n");
                     retries = 0;
                     return 0;
@@ -545,7 +573,7 @@ int llread(unsigned char *packet)
 ////////////////////////////////////////////////
 // LLCLOSE
 ////////////////////////////////////////////////
-int llclose(int showStatistics,LinkLayer connectionParameters)
+int llclose(int showStatistics, LinkLayer connectionParameters)
 {
     StateMachine estado = START;
 
@@ -569,8 +597,8 @@ int llclose(int showStatistics,LinkLayer connectionParameters)
         }
         while (retransmitions > 0 && estado != STOP)
         {
-            unsigned char trama[5] = {FLAG, ADDR_SSAR,DISC , ADDR_SSAR^DISC, FLAG};
-            writeBytesSerialPort(trama,5);
+            unsigned char trama[5] = {FLAG, ADDR_SSAR, DISC, ADDR_SSAR ^ DISC, FLAG};
+            writeBytesSerialPort(trama, 5);
             printf("Sent disconnect frame to the receiver!\n");
             alarm(intervalo);
             alarmEnabled = FALSE;
@@ -579,64 +607,64 @@ int llclose(int showStatistics,LinkLayer connectionParameters)
                 if (readByteSerialPort(&buffer) > 0)
                 {
                     if (estado == START)
-                {
-                    if (buffer == FLAG)
                     {
-                        estado = FLAG_RCV;
+                        if (buffer == FLAG)
+                        {
+                            estado = FLAG_RCV;
+                        }
                     }
-                }
-                else if (estado == FLAG_RCV)
-                {
-                    if (buffer == ADDR_SRAS)
+                    else if (estado == FLAG_RCV)
                     {
-                        estado = A_RCV;
+                        if (buffer == ADDR_SRAS)
+                        {
+                            estado = A_RCV;
+                        }
+                        else if (buffer != FLAG)
+                        {
+                            estado = START;
+                        }
                     }
-                    else if (buffer != FLAG)
+                    else if (estado == A_RCV)
                     {
-                        estado = START;
+                        if (buffer == FLAG)
+                        {
+                            estado = FLAG_RCV;
+                        }
+                        else if (buffer == DISC)
+                        {
+                            estado = C_RCV;
+                        }
+                        else
+                        {
+                            estado = START;
+                        }
                     }
-                }
-                else if (estado == A_RCV)
-                {
-                    if (buffer == FLAG)
+                    else if (estado == C_RCV)
                     {
-                        estado = FLAG_RCV;
+                        if (buffer == (ADDR_SRAS ^ DISC))
+                        {
+                            estado = BCC_OK;
+                        }
+                        else if (buffer == FLAG)
+                        {
+                            estado = FLAG_RCV;
+                        }
+                        else
+                        {
+                            estado = START;
+                        }
                     }
-                    else if (buffer == DISC)
+                    else if (estado == BCC_OK)
                     {
-                        estado = C_RCV;
+                        if (buffer == FLAG)
+                        {
+                            estado = STOP;
+                        }
+                        else
+                        {
+                            estado = START;
+                        }
                     }
-                    else
-                    {
-                        estado = START;
-                    }
-                }
-                else if (estado == C_RCV)
-                {
-                    if (buffer == (ADDR_SRAS ^ DISC))
-                    {
-                        estado = BCC_OK;
-                    }
-                    else if (buffer == FLAG)
-                    {
-                        estado = FLAG_RCV;
-                    }
-                    else
-                    {
-                        estado = START;
-                    }
-                }
-                else if (estado == BCC_OK)
-                {
-                    if (buffer == FLAG)
-                    {
-                        estado = STOP;
-                    }
-                    else
-                    {
-                        estado = START;
-                    }
-                }
                 }
             }
             retransmitions--;
@@ -645,8 +673,8 @@ int llclose(int showStatistics,LinkLayer connectionParameters)
         {
             return -1;
         }
-        unsigned char trama[5] = {FLAG, ADDR_SSAR,CNTRL_UA , ADDR_SSAR^CNTRL_UA, FLAG};
-        writeBytesSerialPort(trama,5);
+        unsigned char trama[5] = {FLAG, ADDR_SSAR, CNTRL_UA, ADDR_SSAR ^ CNTRL_UA, FLAG};
+        writeBytesSerialPort(trama, 5);
         printf("Received the correct disconnect response from the Receiver.\n");
         break;
     }
@@ -718,8 +746,8 @@ int llclose(int showStatistics,LinkLayer connectionParameters)
                 }
             }
         }
-        unsigned char trama[5] = {FLAG, ADDR_SRAS,DISC , ADDR_SRAS^DISC, FLAG};
-        writeBytesSerialPort(trama,5);
+        unsigned char trama[5] = {FLAG, ADDR_SRAS, DISC, ADDR_SRAS ^ DISC, FLAG};
+        writeBytesSerialPort(trama, 5);
         printf("Sent the confirmation of the disconnect to the Transmiter!\n");
         break;
     }
@@ -743,7 +771,7 @@ unsigned char frame_control_check()
     while (estado != STOP && alarmEnabled == FALSE)
     {
         int r = readByteSerialPort(&buffer);
-        if (r > 0 )
+        if (r > 0)
         {
             if (estado == START)
             {
@@ -770,7 +798,7 @@ unsigned char frame_control_check()
                 {
                     estado = FLAG_RCV;
                 }
-                else if (buffer == C_RR0 || buffer == C_RR1 || buffer == C_REJ0 || buffer == C_REJ1 || buffer ==DISC)
+                else if (buffer == C_RR0 || buffer == C_RR1 || buffer == C_REJ0 || buffer == C_REJ1 || buffer == DISC)
                 {
                     estado = C_RCV;
                     campoC = buffer;
@@ -806,22 +834,25 @@ unsigned char frame_control_check()
                     estado = START;
                 }
             }
-        }else if(r == -1){
+        }
+        else if (r == -1)
+        {
             perror("Write failed due to connection loss");
             closeSerialPort();
             printf("Attempting to reconnect...\n");
 
             fd = llopen(layerzinha);
-            if (fd < 0) {
+            if (fd < 0)
+            {
                 retries++;
                 printf("Reconnect failed, retrying (%d/%d)\n", retries, transmissoes);
-                
-            } else {
+            }
+            else
+            {
                 printf("Reconnected successfully, resuming...\n");
-                retries = 0; 
+                retries = 0;
                 return 0;
             }
-            
         }
     }
     return campoC;

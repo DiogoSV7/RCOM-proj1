@@ -15,19 +15,16 @@
 //   nTries: Maximum number of frame retries.
 //   timeout: Frame timeout.
 //   filename: Name of the file to send / receive.
-void applicationLayer(const char *serialPort, const char *role, int baudRate,
-                      int nTries, int timeout, const char *filename);
+void applicationLayer(const char *serialPort, const char *role, int baudRate, int nTries, int timeout, const char *filename);
 
-long int findFileSize(FILE *file);
+long int getFileSizeFromPacket(unsigned char* packet);
 
-unsigned char *buildControlPacket(const char *filename, long int filesize, unsigned int *length);
+unsigned char* getFileNameFromPacket(unsigned char* packet);
 
-void buildDataPacket(FILE* file, unsigned char *dataPacket, int dataSize, unsigned char identifier);
+long int getFileSize(FILE *file);
 
-long int extractFileSize(unsigned char* packet);
+unsigned char *createControlPacket(const char *filename, long int filesize, unsigned int *length);
 
-unsigned char* extractFileName(unsigned char* packet);
-
-void extractData(unsigned char* packet, unsigned char* buffer, int datasize);
+void createDataPacket(FILE* file, unsigned char *dataPacket, int dataSize, unsigned char identifier);
 
 #endif // _APPLICATION_LAYER_H_
