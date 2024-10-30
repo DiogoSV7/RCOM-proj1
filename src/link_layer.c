@@ -210,7 +210,6 @@ int llopen(LinkLayer connectionParameters)
                 }
                 else if (estado == BCC_OK)
                 {
-                    fflush(stdout);
                     if (buffer == FLAG)
                     {
                         estado = STOP;
