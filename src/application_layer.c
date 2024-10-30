@@ -127,13 +127,12 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate, in
             printf("Successfully sent start control packet\n");
         }
 
-        long int bytes = fsize;
+        long int numberOfBytes = fsize;
         unsigned char id = 0;
 
-        while (bytes > 0)
+        while (numberOfBytes > 0)
         {
-            printf("Bytes remaining to send: %ld\n", bytes);
-            int dataSize = bytes > (long int)(MAX_PAYLOAD_SIZE - 4) ? (MAX_PAYLOAD_SIZE - 4) : bytes;
+            int dataSize = numberOfBytes > (long int)(MAX_PAYLOAD_SIZE - 4) ? (MAX_PAYLOAD_SIZE - 4) : numberOfBytes;
             int dataPacketSize = dataSize + 4;
             unsigned char *dataPacket = (unsigned char *)malloc(dataPacketSize);
             createDataPacket(file, dataPacket, dataSize, id);
@@ -143,19 +142,19 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate, in
                 perror("Failed to send data packet\n");
                 exit(EXIT_FAILURE);
             }
-            bytes -= dataSize;
+            numberOfBytes -= dataSize;
             id = (id + 1) % 255;
         }
 
         controlPacket[0] = 3;
         if (llwrite(controlPacket, controlPacketlength) == -1)
         {
-            perror("Failed to send end control packet\n");
+            perror("Failed to send end control packet!\n");
             exit(EXIT_FAILURE);
         }
         else
         {
-            printf("Successfully sent end control packet\n");
+            printf("Successfully sent end control packet!\n");
         }
         llclose(fd, linklayer);
         break;
@@ -174,7 +173,11 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate, in
         }
         long int fileSize = getFileSizeFromPacket(packet);
         unsigned char *newFileName = getFileNameFromPacket(packet);
-        FILE *newFile = fopen((char *)filename, "wb+"); // change to filename if testing in the same computer.
+        printf("\n");
+        printf("The file named '%s', with a filesize of %ld bytes, will be transferred.\n", newFileName, fileSize);
+        printf("\n");
+
+        FILE *newFile = fopen((char *)filename, "wb+"); // change to "newFileName" to "filename" if testing in the same computer.
 
         while (TRUE)
         {
