@@ -4,6 +4,7 @@
 #ifndef _LINK_LAYER_H_
 #define _LINK_LAYER_H_
 
+#include <time.h>
 
 typedef enum
 {
@@ -31,6 +32,17 @@ typedef struct
     int nRetransmissions;
     int timeout;
 } LinkLayer;
+
+typedef struct {
+    int sentFrames;
+    int receivedFrames;
+    int retransmissions;
+    int errors;
+    time_t startTime;
+    time_t endTime;
+    double totalTime;
+} LinkLayerStats;
+
 
 // SIZE of maximum acceptable payload.
 // Maximum number of bytes that application layer should send to link layer
